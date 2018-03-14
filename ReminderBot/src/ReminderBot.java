@@ -2,9 +2,11 @@ import org.apache.commons.lang3.ObjectUtils;
 import org.glassfish.grizzly.http.util.TimeStamp;
 import org.telegram.telegrambots.ApiContextInitializer;
 import org.telegram.telegrambots.TelegramBotsApi;
+import org.telegram.telegrambots.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.api.methods.ForwardMessage;
 import org.telegram.telegrambots.api.methods.send.SendAudio;
 import org.telegram.telegrambots.api.methods.send.SendMessage;
+import org.telegram.telegrambots.api.methods.updatingmessages.EditMessageReplyMarkup;
 import org.telegram.telegrambots.api.objects.Message;
 import org.telegram.telegrambots.api.objects.Update;
 import org.telegram.telegrambots.api.objects.replykeyboard.InlineKeyboardMarkup;
@@ -32,30 +34,31 @@ import static java.util.Objects.isNull;
 
 public class ReminderBot extends TelegramLongPollingBot {
     public static void main(String[] args) {
-        ApiContextInitializer.init(); // Инициализируем апи
-        TelegramBotsApi botapi = new TelegramBotsApi();
+        ApiContextInitializer.init();
+        TelegramBotsApi botapi = new TelegramBotsApi();         //Api initialization
         try{
-            botapi.registerBot(new ReminderBot());
+            botapi.registerBot(new ReminderBot());          //Bot registration
         } catch (TelegramApiException e){
             e.printStackTrace();
         }
     }
     @Override
     public String getBotUsername() {
-        return "ArticleReminderBot";
-        //возвращаем юзера
+        return "ArticleReminderBot";            //Bot's name
     }
 
     @Override
     public String getBotToken() {
-        return "554141774:AAHT89N-sepPsGZMIGRVdED9kv_0VDbXSF4";
-        //Токен бота
+        return "554141774:AAHT89N-sepPsGZMIGRVdED9kv_0VDbXSF4";         //Bot unique Token
     }
+
+    protected ForwardMessage forwardArticle=null;
 
     @SuppressWarnings("deprecation")
     @Override
     public void onUpdateReceived(Update update) {
-        // We check if the update has a message and the message has text
+        SendMessage answerMessage;
+
         InlineKeyboardMarkup questionmarkup=new InlineKeyboardMarkup();
         List<List<InlineKeyboardButton>> questionkeyboard=new ArrayList<>();
         List<InlineKeyboardButton> buttonsrow1=new ArrayList<>();
@@ -63,7 +66,7 @@ public class ReminderBot extends TelegramLongPollingBot {
         List<InlineKeyboardButton> buttonsrow3=new ArrayList<>();
         buttonsrow1.add(new InlineKeyboardButton().setText("Today").setCallbackData("Today"));
         buttonsrow1.add(new InlineKeyboardButton().setText("Tomorrow").setCallbackData("Tomorrow"));
-        buttonsrow1.add(new InlineKeyboardButton().setText("Overmorrow").setCallbackData("Overmorrow"));
+        buttonsrow1.add(new InlineKeyboardButton().setText("Overmorrow").setCallbackData("Overmorrow"));        //Inline keyboard markup
         buttonsrow2.add(new InlineKeyboardButton().setText("8:00").setCallbackData("8:00"));
         buttonsrow2.add(new InlineKeyboardButton().setText("10:00").setCallbackData("10:00"));
         buttonsrow2.add(new InlineKeyboardButton().setText("12:00").setCallbackData("12:00"));
@@ -75,98 +78,68 @@ public class ReminderBot extends TelegramLongPollingBot {
         questionkeyboard.add(buttonsrow3);
         questionmarkup.setKeyboard(questionkeyboard);
 
-
         if (update.hasMessage() && !(update.getMessage().getChatId().equals(update.getMessage().getForwardFromChat().getId()))) {
-            ForwardMessage fwrd = new ForwardMessage() // Create a SendMessage object with mandatory fields
+            forwardArticle=new ForwardMessage()
                     .setChatId(update.getMessage().getChatId())
                     .setFromChatId(update.getMessage().getChat().getId())
                     .setMessageId(update.getMessage().getMessageId());
-            SendMessage message = new SendMessage()
+            answerMessage=new SendMessage()
                     .setChatId(update.getMessage().getChatId())
                     .setText("When should I remind you?")
                     .setReplyMarkup(questionmarkup);
-            Integer unixTime = update.getMessage().getDate();
-            Date date = new Date(unixTime * 1000L);
-            SimpleDateFormat simpleDateFormat = new SimpleDateFormat("k:mm");
-            simpleDateFormat.setTimeZone(TimeZone.getTimeZone("GMT+3"));
-            String time = simpleDateFormat.format(date);
-            Long chat_id=update.getMessage().getChatId();
             try {
-                //forwardMessage(fwrd);// Call method to send the message
-                sendMessage(message);
+                sendMessage(answerMessage);
             } catch (TelegramApiException e) {
                 e.printStackTrace();
             }
-            final ScheduledExecutorService scheduledExecutorService= Executors.newScheduledThreadPool(1);
-            final Runnable sender=new Runnable() {
-                @Override
-                public void run() {
-                    try{
-                        forwardMessage(fwrd);
-                    } catch (TelegramApiException e){
-                        e.printStackTrace();
-                    }
-                };
-            };
-            scheduledExecutorService.schedule(sender,20 , TimeUnit.SECONDS);
         }
-            if (update.hasCallbackQuery()) {
-                ForwardMessage fwrd = new ForwardMessage() // Create a SendMessage object with mandatory fields
-                        .setChatId(update.getMessage().getChatId())
-                        .setFromChatId(update.getMessage().getChat().getId())
-                        .setMessageId(update.getMessage().getMessageId());
+        if (update.hasCallbackQuery() && forwardArticle!=null) {
+            LocalDate ld=LocalDate.now();
+            if (update.getCallbackQuery().getData().contains("o")){         //Getting the info about the day to post, since all day options have "o"
+                switch (update.getCallbackQuery().getData()){
+                    case "Tomorrow": ld.plusDays(1); break;
+                    case "Overmorrow": ld.plusDays(2); break;
+                    default: break;
+                }
+            } else {
+//            InlineKeyboardMarkup newmarkup=questionmarkup;
+//            for(List<InlineKeyboardButton> list: newmarkup.getKeyboard()){
+//                for(InlineKeyboardButton button:list){
+//                    if (button.getCallbackData()==update.getCallbackQuery().getData()){
+//                        button.setText("\u2022"+button.getText());
+//                    }
+//                }
+//            }
+//            EditMessageReplyMarkup replyMarkup=new EditMessageReplyMarkup()
+//                    .setChatId(update.getCallbackQuery().getMessage().getChatId())
+//                    .setMessageId(update.getCallbackQuery().getMessage().getMessageId())
+//                    .setReplyMarkup(newmarkup);
                 int delay = 0;
-                String string = "";
-                String string2="";
                 try {
-                    Integer unixtime1=update.getCallbackQuery().getMessage().getDate();
-                    LocalDate ld=LocalDate.now();
+                    Integer unixtimenow = update.getCallbackQuery().getMessage().getDate();
                     SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd k:mm");
                     sdf.setTimeZone(TimeZone.getTimeZone("GMT+3"));
-                    Date date = sdf.parse(ld+" "+update.getCallbackQuery().getData());
-                    Integer unixtime2=(int) (date.getTime()/1000);
-                    //Long i=unixtime2-unixtime1;
-                    string=unixtime1.toString(); //sdf.format(date);
-                    string2=unixtime2.toString(); //sdf.format(new Date(update.getCallbackQuery().getMessage().getDate()*1000L));
-                    delay=unixtime2-unixtime1;
-
+                    Date date = sdf.parse(ld + " " + update.getCallbackQuery().getData());
+                    Integer unixtimesend = (int) (date.getTime() / 1000);
+                    delay = unixtimesend - unixtimenow;
                 } catch (ParseException e) {
                     e.printStackTrace();
                 }
-                try {
-                    SendMessage sendMessage = new SendMessage()
-                            .setChatId(update.getCallbackQuery().getMessage().getChatId())
-                            .setText(string);
-                    sendMessage(sendMessage);
-                    SendMessage sendMessage2 = new SendMessage()
-                            .setChatId(update.getCallbackQuery().getMessage().getChatId())
-                            .setText(string2);
-                    sendMessage(sendMessage2);
-                    final ScheduledExecutorService scheduledExecutorService= Executors.newScheduledThreadPool(1);
-                    final Runnable sender=new Runnable() {
-                        @Override
-                        public void run() {
-                            try{
-                                forwardMessage(fwrd);
-                            } catch (TelegramApiException e){
-                                e.printStackTrace();
-                            }
-                        };
-                    };
-                    scheduledExecutorService.schedule(sender,20 , TimeUnit.SECONDS);
-                } catch (TelegramApiException e) {
-                    e.printStackTrace();
-                }
+//                ForwardMessage fwrdMessage=forwardArticle;
+//                    final ScheduledExecutorService scheduledExecutorService= Executors.newScheduledThreadPool(1);
+//                    final Runnable sender=new Runnable() {
+//                        @Override
+//                        public void run() {
+//                            try{
+//                                forwardMessage(fwrdMessage);
+//                            } catch (TelegramApiException e){
+//                                e.printStackTrace();
+//                            }
+//                        };
+//                    };
+//                    scheduledExecutorService.schedule(sender,30, TimeUnit.SECONDS);
 
             }
-        else if (update.hasMessage()){
-            ReplyKeyboardMarkup replyKeyboardMarkup=new ReplyKeyboardMarkup();
-
-            SendMessage message=new SendMessage()
-                    .setChatId(update.getMessage().getChatId())
-                    .setText("When should I remind you?");
-        }
+            }
     }
-
-
 }
